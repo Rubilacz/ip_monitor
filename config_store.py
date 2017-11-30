@@ -6,7 +6,7 @@ class ConfigStore:
 
     def __init__(self, config_file):
         self._config_file = config_file
-        self._config_parser = configparser.ConfigParser()
+        self._config_parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
         self._config_parser.read(config_file)
 
     def get(self, section, option, default_value=None):

@@ -4,6 +4,8 @@ from imaplib import IMAP4_SSL
 from smtplib import SMTP_SSL
 from email.mime.text import MIMEText
 import email
+import re
+import threading
 
 class Mail:
 
@@ -22,6 +24,7 @@ class Mail:
 class MailManager:
 
     def __init__(self, imap_host=None, imap_port=993, smtp_host=None, smtp_port=465):
+        self._lock = threading.Lock()
         self._imap = None
         self._smtp = None
         self._user = None
@@ -30,6 +33,7 @@ class MailManager:
         if smtp_host:
             self._smtp = SMTP_SSL(smtp_host, smtp_port)
 
+    # TODO auto re-auth while session outdated
     def authorize(self, user, password):
         self._user = user
         if self._imap:
@@ -44,6 +48,7 @@ class MailManager:
             self._smtp.close()
 
     def send(self, mail):
+        self._lock.acquire()
         mail.sender = self._user
         self._check_mail(mail)
         mime_text = MIMEText(mail.message, 'plain', 'utf-8')
@@ -51,6 +56,7 @@ class MailManager:
         mime_text['To'] = mail.recipient
         mime_text['Subject'] = mail.subject
         self._smtp.sendmail(mail.sender, [mail.recipient], mime_text.as_string())
+        self._lock.release()
 
     # def receive(self, criteria):
     #     '''deprecated.
@@ -70,15 +76,17 @@ class MailManager:
     #     return emails
 
     def pop(self, sender_matcher, subject_matcher):
+        self._lock.acquire()
         mail = None
         self._imap.select()
         _, uids = self._imap.search(None, 'ALL')
         for uid in uids[0].split():
             tmp = self._fetch_mail(uid)
-            if tmp.subject == subject_matcher and tmp.sender == sender_matcher:
+            if re.match(subject_matcher, tmp.subject) and re.match(sender_matcher, tmp.sender):
                 mail = tmp
                 self.delete(mail.uid)
                 break
+        self._lock.release()
         return mail
 
     def _fetch_mail(self, uid):
